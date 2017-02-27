@@ -1,0 +1,123 @@
+buildscript {
+    repositories {
+        mavenCentral()
+        maven {
+            url "https://oss.sonatype.org/content/repositories/snapshots"
+        }        
+    }
+    dependencies {      
+        classpath 'com.android.tools.build:gradle:1.2.+'
+        classpath 'com.neenbedankt.gradle.plugins:android-apt:1.2'        
+        classpath 'me.tatarka:gradle-retrolambda:3.1.0'
+    }
+}
+
+apply plugin: 'eclipse'
+apply plugin: 'android'
+apply plugin: 'android-apt'
+apply plugin: 'com.android.application'
+apply plugin: 'me.tatarka.retrolambda'
+
+allprojects {
+    repositories {
+        mavenCentral()
+        maven {
+            url "https://oss.sonatype.org/content/repositories/snapshots"
+        }
+    }
+}
+
+android {
+    compileSdkVersion 19
+    buildToolsVersion "19.1.0"
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDirs = ['src']
+            resources.srcDirs = ['src']
+            aidl.srcDirs = ['src']
+            renderscript.srcDirs = ['src']
+            res.srcDirs = ['res']
+            assets.srcDirs = ['assets']
+        }        
+        
+        instrumentTest.setRoot('tests')
+
+        debug.setRoot('build-types/debug')
+        release.setRoot('build-types/release')
+    }
+}
+
+
+dependencies {
+	compile 'com.innahema:collections-query:0.2.7'
+	compile 'com.google.code.gson:gson:1.7.2'
+}
+
+
+retrolambda {
+    jdk System.getenv("JAVA8_HOME")
+    oldJdk System.getenv("JAVA7_HOME")
+    javaVersion JavaVersion.VERSION_1_7
+}
+
+
+task copyJarDependencies(type: Copy) {
+    description = 'Used for Eclipse. Copies all dependencies to the libs directory. If there are any AAR files it will extract the classes.jar and rename it the same as the AAR file but with a .jar on the end.'
+    println 'Adding dependencies from compile configuration'
+    configurations.compile.filter {it.name.endsWith 'jar'}.each { File file -> moveJarIntoLibs(file)}
+    println 'Adding dependencies from releaseCompile configuration'
+    configurations.releaseCompile.filter {it.name.endsWith 'jar'}.each { File file -> moveJarIntoLibs(file)}
+    println 'Adding dependencies from debugCompile configuration'
+    configurations.debugCompile.filter {it.name.endsWith 'jar'}.each { File file -> moveJarIntoLibs(file)}
+    println 'Adding dependencies from instrumentTestCompile configuration'
+    configurations.instrumentTestCompile.filter {it.name.endsWith 'jar'}.each { File file -> moveJarIntoLibs(file)}
+    println 'Extracting dependencies from compile configuration'
+    configurations.compile.filter {it.name.endsWith 'aar'}.each { File file -> moveAndRenameAar(file) }
+    println 'Extracting dependencies from releaseCompile configuration'
+    configurations.releaseCompile.filter {it.name.endsWith 'aar'}.each { File file -> moveAndRenameAar(file) }
+    println 'Extracting dependencies from debugCompile configuration'
+    configurations.debugCompile.filter {it.name.endsWith 'aar'}.each { File file -> moveAndRenameAar(file) }
+    println 'Extracting AAR dependencies from instrumentTestCompile configuration'
+    configurations.instrumentTestCompile.filter {it.name.endsWith 'aar'}.each { File file -> moveAndRenameAar(file) }
+}
+
+void moveJarIntoLibs(File file){
+    println 'Added jar ' + file
+        copy{
+            from file
+            into 'libs'
+        }
+}
+
+void moveAndRenameAar(File file){
+    println 'Added aar ' + file
+    def baseFilename = file.name.lastIndexOf('.').with {it != -1 ? file.name[0..<it] : file.name}
+
+    // directory excluding the classes.jar
+    copy{
+        from zipTree(file)
+        exclude 'classes.jar'
+        into 'libs/'+baseFilename
+    }
+
+    // Copies the classes.jar into the libs directory of the expoded AAR.
+    // In Eclipse you can then import this exploded ar as an Android project
+    // and then reference not only the classes but also the android resources :D 
+    copy{
+        from zipTree(file)
+        include 'classes.jar'
+        into 'libs/' + baseFilename +'/libs'
+        rename { String fileName ->
+            fileName.replace('classes.jar', baseFilename + '.jar')
+        }
+    }
+}
+
+
